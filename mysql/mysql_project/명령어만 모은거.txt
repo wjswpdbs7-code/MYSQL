@@ -192,3 +192,5 @@ insert into shade_device values (17, 9, '열림', NOW());
 insert into shade_device values (18, 9, '열림', NOW());
 insert into shade_device values (19, 10, '열림', NOW());
 insert into shade_device values (20, 10, '열림', NOW());
+
+
