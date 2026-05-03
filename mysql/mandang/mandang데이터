@@ -19,7 +19,7 @@
 +--------+-------------------+------------+-------+
 
 --customer 테이블 
-
+primary key는 custid입니다.
 +--------+--------+-----------------+---------------+
 | custid | name   | address         | phone         |
 +--------+--------+-----------------+---------------+
@@ -45,3 +45,12 @@
 |       9 |      2 |     10 |      7000 | 2014-07-09 |
 |      10 |      3 |      8 |     13000 | 2014-07-10 |
 +---------+--------+--------+-----------+------------+
+
+primary key는 bookid, custid, orderid입니다.
+foreign key는 orders 테이블의 custid가 customer 테이블의 custid를 참조하고, orders 테이블의 bookid가 book 테이블의 bookid를 참조합니다.
+FOREIGN KEY 가 없는경우 orders 테이블의 custid와 bookid는 각각 customer 테이블과 book 테이블의 custid와 bookid를 참조하지만, 외래 키 제약 조건이 설정되어 있지 않으므로 데이터 무결성이 보장되지 않습니다. 이는 잘못된 custid나 bookid가 orders 테이블에 삽입될 수 있음을 의미합니다.
+그런 경우의 예시 
+
+INSERT INTO orders (orderid, custid, bookid, saleprice, orderdate) VALUES (11, 999, 999, 10000, '2014-07-11');
+
+외래키의 역할은 데이터 무결성을 보장하는 것입니다. 외래 키 제약 조건이 설정되어 있으면, orders 테이블에 삽입되는 custid와 bookid는 각각 customer 테이블과 book 테이블의 custid와 bookid를 참조해야 합니다. 따라서 위의 예시에서 custid 999와 bookid 999는 존재하지 않으므로 삽입이 실패하게 됩니다. 이는 데이터베이스의 무결성을 유지하는 데 중요한 역할을 합니다.

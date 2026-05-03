@@ -12,6 +12,7 @@ create table apply(
 ================================기본 명령어, 데이터 베이스 생성====================================
 
 create database iot;//데이터베이스 생성[]
+use iot;//사용 데이터베이스 선택
 
 show databases;--//데이터베이스 목록 보기
 show tables;--//테이블 목록 보기
@@ -81,10 +82,11 @@ create table orders(
     bookid integer, 
     saleprice integer,
     orderdate date,
-    foreign key (custid) references Customer(custid) ON DELETE CASCADE,
+    foreign key (custid) references Customer(custid) ON DELETE CASCADE, 
     foreign key (bookid) references Book(bookid) ON DELETE CASCADE
 ); 
 --on delete cascade; //참조된 행이 삭제될 때 참조하는 행도 함께 삭제하는 옵션입니다. 예를 들어, Customer 테이블에서 고객이 삭제되면 해당 고객이 주문한 주문도 함께 삭제됩니다.
+--한번 선언 한 다음 외래키 지정시 한번 더 
 
 
 

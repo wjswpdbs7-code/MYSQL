@@ -1,371 +1,396 @@
-# 수강신청 데이터베이스 설계 정보
-
-이 문서는 수강신청 시스템을 만들 때 필요한 데이터베이스 설계 정보를 정리한 자료입니다. 실제 SQL 문장보다는, 어떤 정보를 어떤 테이블에 저장해야 하는지 이해하는 데 목적이 있습니다.
-
-## 1. 수강신청 시스템의 목적
-
-수강신청 데이터베이스는 학생이 원하는 강의를 선택하고, 학과와 교수 정보, 강의 개설 현황, 신청 결과를 체계적으로 관리하기 위한 구조입니다. 보통 다음과 같은 작업을 지원해야 합니다.
-
-- 학생 정보 관리
-- 교수 정보 관리
-- 학과 정보 관리
-- 강의 개설 및 강의 분반 관리
-- 학생의 수강신청 내역 관리
-- 시간표 충돌 확인
-- 정원 초과 여부 확인
-- 폐강, 수강정정, 취소 이력 관리
-
-## 2. 핵심 데이터 항목
-
-수강신청 시스템에서 가장 기본이 되는 정보는 다음과 같습니다.
-
-- 학생: 학번, 이름, 학과, 학년, 연락처, 상태
-- 교수: 교수번호, 이름, 소속학과, 직급, 연락처
-- 학과: 학과번호, 학과명, 단과대학
-- 과목: 과목번호, 과목명, 학점, 전공 여부, 설명
-- 강의: 개설학기, 분반, 담당교수, 정원, 강의실, 시간표
-- 신청: 학생이 어떤 강의를 언제 신청했는지에 대한 기록
-
-## 3. 권장 테이블 구조
-
-수강신청 시스템은 한 테이블만으로 관리하기보다 여러 테이블로 나누는 것이 좋습니다. 보통 다음과 같이 설계합니다.
-
-### 3-1. 학생 정보
-
-학생 테이블에는 학생의 기본 인적 사항과 소속 정보를 저장합니다.
-
-- 학생 고유 번호 또는 학번
-- 이름
-- 소속 학과
-- 학년
-- 연락처
-- 이메일
-- 재학 상태
-
-이 테이블의 핵심은 학생을 유일하게 구분할 수 있는 값입니다. 학번은 절대 중복되면 안 됩니다.
-
-### 3-2. 교수 정보
-
-교수 테이블은 강의를 담당하는 사람의 정보를 저장합니다.
-
-- 교수번호
-- 이름
-- 소속 학과
-- 직급
-- 연락처
-- 이메일
-
-교수는 여러 강의를 맡을 수 있으므로, 교수와 강의는 1대다 관계가 됩니다.
-
-### 3-3. 학과 정보
-
-학과 테이블은 학생과 교수, 과목이 어느 조직에 속하는지 관리합니다.
-
-- 학과번호
-- 학과명
-- 단과대학명
-- 사무실 위치
-- 연락처
-
-학과 정보는 다른 테이블에서 참조하는 기준 데이터가 되므로, 별도 테이블로 분리하는 것이 좋습니다.
-
-### 3-4. 과목 정보
-
-과목 테이블은 과목 자체의 고정 정보를 저장합니다.
-
-- 과목번호
-- 과목명
-- 학점
-- 전공필수 여부
-- 이수구분
-- 과목 설명
-
-과목은 개설되는 시점과는 별개로 존재할 수 있습니다. 예를 들어 같은 과목이 매년 여러 학기에 다시 열릴 수 있으므로, 과목 정보와 개설 강의 정보는 분리하는 것이 일반적입니다.
-
-### 3-5. 강의 개설 정보
-
-강의 개설 테이블은 특정 학기, 특정 분반으로 실제 열린 강의를 저장합니다.
-
-- 개설번호
-- 과목번호
-- 교수번호
-- 학기
-- 연도
-- 분반
-- 정원
-- 강의실
-- 요일
-- 시작교시
-- 종료교시
-- 수업 형태
-
-이 테이블이 가장 중요합니다. 학생은 과목 자체가 아니라, 실제로 열린 개설 강의를 신청하기 때문입니다.
-
-### 3-6. 수강신청 정보
-
-수강신청 테이블은 학생이 어떤 개설 강의를 신청했는지를 저장합니다.
-
-- 신청번호
-- 학번
-- 개설번호
-- 신청일시
-- 신청 상태
-- 성적 확정 여부
-
-학생과 개설 강의 사이에는 다대다 관계가 존재하므로, 이를 연결하는 중간 테이블이 필요합니다. 같은 학생은 여러 강의를 신청할 수 있고, 같은 강의도 여러 학생이 신청할 수 있습니다.
-
-## 4. 테이블 간 관계
-
-수강신청 DB에서는 관계를 정확히 잡는 것이 매우 중요합니다.
-
-- 학과 1개는 여러 학생을 가질 수 있습니다.
-- 학과 1개는 여러 교수를 가질 수 있습니다.
-- 학과 1개는 여러 과목과 연결될 수 있습니다.
-- 과목 1개는 여러 학기에 여러 번 개설될 수 있습니다.
-- 교수 1명은 여러 개설 강의를 맡을 수 있습니다.
-- 학생 1명은 여러 개설 강의를 신청할 수 있습니다.
-- 개설 강의 1개는 여러 학생에게 신청될 수 있습니다.
-
-즉, 중심 구조는 다음처럼 이해하면 좋습니다.
-
-- 학과는 학생, 교수, 과목의 기준 정보
-- 과목은 강의 개설의 원본 정보
-- 강의 개설은 실제 수업 단위
-- 수강신청은 학생과 개설 강의를 연결하는 기록
-
-## 5. 주요 제약 조건
-
-DB가 정확하게 동작하려면 제약 조건이 필요합니다.
-
-### 5-1. 기본 키
-
-각 테이블은 서로 다른 행을 구분할 수 있는 기본 키가 필요합니다.
-
-- 학생 테이블: 학번
-- 교수 테이블: 교수번호
-- 학과 테이블: 학과번호
-- 과목 테이블: 과목번호
-- 강의 개설 테이블: 개설번호
-- 수강신청 테이블: 신청번호 또는 학번+개설번호 조합
-
-### 5-2. 외래 키
-
-다른 테이블과 연결되는 값은 외래 키로 관리해야 합니다.
-
-- 학생의 학과번호는 학과 테이블을 참조
-- 교수의 학과번호는 학과 테이블을 참조
-- 과목의 학과번호는 학과 테이블을 참조
-- 강의 개설의 과목번호는 과목 테이블을 참조
-- 강의 개설의 교수번호는 교수 테이블을 참조
-- 수강신청의 학번은 학생 테이블을 참조
-- 수강신청의 개설번호는 강의 개설 테이블을 참조
-
-### 5-3. 중복 방지
-
-같은 학생이 같은 강의를 두 번 신청하지 않도록 제약이 필요합니다. 보통 학번과 개설번호의 조합에 중복이 없도록 설계합니다.
-
-### 5-4. 정원 관리
-
-개설 강의에는 정원이 있어야 하며, 신청 인원이 정원을 넘지 않도록 관리해야 합니다. 이 값은 신청 가능 여부를 판단하는 핵심 기준입니다.
-
-### 5-5. 시간표 충돌 방지
-
-학생이 신청하려는 강의의 시간대가 이미 신청한 강의와 겹치면 안 됩니다. 따라서 강의 개설 테이블에는 요일, 시작교시, 종료교시 정보가 필요합니다.
-
-## 6. 반드시 필요한 운영 정보
-
-수강신청 시스템은 단순히 이름만 저장하는 것으로 끝나지 않습니다. 다음 정보도 있으면 좋습니다.
-
-- 신청 상태: 신청, 취소, 대기, 폐강
-- 학기 구분: 1학기, 2학기, 여름학기, 겨울학기
-- 수업 구분: 전공, 교양, 선택, 필수
-- 강의 형태: 대면, 비대면, 혼합형
-- 성적 처리 여부: 미처리, 확정, 보류
-- 등록 상태: 재학, 휴학, 졸업, 자퇴
-
-이런 정보가 있으면 학사 시스템과 연동하기가 쉬워집니다.
-
-## 7. 자주 필요한 조회 정보
-
-실제 시스템에서는 다음과 같은 조회가 자주 필요합니다.
-
-- 학생이 이번 학기에 신청한 강의 목록
-- 특정 강의의 신청 인원
-- 강의별 남은 정원
-- 교수별 담당 강의 목록
-- 학과별 개설 강의 목록
-- 학생의 시간표
-- 중복 신청 여부
-- 취소된 신청 내역
-
-## 8. 데이터 설계 시 주의할 점
-
-- 학생 이름만으로는 사람을 구분할 수 없으므로 반드시 학번이 필요합니다.
-- 과목과 강의 개설은 같은 의미가 아니므로 분리해야 합니다.
-- 교수와 학과 정보를 중복 저장하지 말고 참조하는 방식이 좋습니다.
-- 수강신청은 학생과 강의 개설을 연결하는 관계 테이블로 보는 것이 맞습니다.
-- 시간표와 정원 정보는 실제 수강 가능 여부를 판단하는 핵심입니다.
-- 삭제가 일어나도 신청 기록이 필요한 경우가 많으므로 로그성 데이터 유지 정책을 고려해야 합니다.
-
-## 9. 설계 예시 흐름
-
-수강신청 DB를 만든다고 가정하면 흐름은 보통 다음 순서입니다.
-
-1. 학과 정보를 먼저 등록한다.
-2. 학생과 교수 정보를 학과에 연결한다.
-3. 과목 정보를 등록한다.
-4. 특정 학기에 개설된 강의를 만든다.
-5. 학생이 개설 강의를 신청한다.
-6. 신청 인원과 시간표를 검사한다.
-7. 취소와 정정 내역을 관리한다.
-
-## 10. 문서 작성용 핵심 요약
-
-수강신청 데이터베이스는 학생, 교수, 학과, 과목, 강의 개설, 신청 정보를 분리해서 저장해야 합니다. 특히 과목과 강의 개설을 구분하고, 수강신청은 학생과 개설 강의를 연결하는 구조로 설계하는 것이 핵심입니다. 정원, 시간표, 중복 신청, 상태 값까지 함께 관리해야 실제 운영에 적합한 데이터베이스가 됩니다.
-
-## 11. 실제 예시 데이터
-
-아래는 수강신청 시스템을 설명할 때 사용할 수 있는 샘플 데이터입니다. 실제 설계나 테스트를 할 때는 이처럼 식별자와 관계가 서로 연결되도록 넣는 것이 좋습니다.
-
-### 11-1. 학과 예시
-
-| 학과번호 | 학과명 | 단과대학명 | 사무실 위치 | 연락처 |
-| --- | --- | --- | --- | --- |
-| D001 | 컴퓨터공학과 | 공과대학 | 공학관 302호 | 02-111-1001 |
-| D002 | 소프트웨어학과 | 공과대학 | 공학관 305호 | 02-111-1002 |
-| D003 | 경영학과 | 경영대학 | 경영관 201호 | 02-222-2001 |
-| D004 | 전자공학과 | 공과대학 | 전자관 410호 | 02-111-1004 |
-
-### 11-2. 학생 예시
-
-| 학번 | 이름 | 학과번호 | 학년 | 연락처 | 이메일 | 재학 상태 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 20241001 | 김민준 | D001 | 1 | 010-1234-1001 | minjun@univ.ac.kr | 재학 |
-| 20241002 | 이서연 | D002 | 2 | 010-1234-1002 | seoyeon@univ.ac.kr | 재학 |
-| 20241003 | 박지후 | D001 | 3 | 010-1234-1003 | jiho@univ.ac.kr | 재학 |
-| 20241004 | 최유진 | D003 | 2 | 010-1234-1004 | yujin@univ.ac.kr | 재학 |
-| 20241005 | 정현우 | D004 | 4 | 010-1234-1005 | hyunwoo@univ.ac.kr | 휴학 |
-
-### 11-3. 교수 예시
-
-| 교수번호 | 이름 | 소속 학과 | 직급 | 연락처 | 이메일 |
-| --- | --- | --- | --- | --- | --- |
-| T001 | 김태호 | D001 | 조교수 | 02-333-3001 | taecho@univ.ac.kr |
-| T002 | 이정민 | D002 | 부교수 | 02-333-3002 | jmlee@univ.ac.kr |
-| T003 | 박선영 | D003 | 교수 | 02-333-3003 | sypark@univ.ac.kr |
-
-### 11-4. 과목 예시
-
-| 과목번호 | 과목명 | 학점 | 전공필수 여부 | 이수구분 | 과목 설명 | 학과번호 |
-| --- | --- | --- | --- | --- | --- | --- |
-| C101 | 데이터베이스 | 3 | 예 | 전공 | 데이터 저장과 질의의 기본 원리를 배우는 과목 | D001 |
-| C102 | 자료구조 | 3 | 예 | 전공 | 배열, 리스트, 스택, 큐, 트리 구조를 학습하는 과목 | D001 |
-| C103 | 웹프로그래밍 | 3 | 아니오 | 전공선택 | 웹 화면과 서버 통신을 다루는 과목 | D002 |
-| C104 | 경영정보시스템 | 3 | 아니오 | 전공선택 | 경영 의사결정에 정보시스템을 활용하는 과목 | D003 |
-| C105 | 디지털논리회로 | 3 | 예 | 전공 | 논리 게이트와 조합회로를 다루는 과목 | D004 |
-
-### 11-5. 강의 개설 예시
-
-| 개설번호 | 과목번호 | 교수번호 | 연도 | 학기 | 분반 | 정원 | 강의실 | 요일 | 시작교시 | 종료교시 | 수업 형태 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| O001 | C101 | T001 | 2026 | 1학기 | 1 | 30 | 공학관 101호 | 월 | 2 | 4 | 대면 |
-| O002 | C102 | T001 | 2026 | 1학기 | 1 | 35 | 공학관 102호 | 수 | 2 | 4 | 대면 |
-| O003 | C103 | T002 | 2026 | 1학기 | 1 | 25 | 공학관 203호 | 화 | 5 | 7 | 혼합형 |
-| O004 | C104 | T003 | 2026 | 1학기 | 1 | 40 | 경영관 105호 | 목 | 1 | 3 | 대면 |
-| O005 | C105 | T001 | 2026 | 1학기 | 1 | 20 | 전자관 210호 | 금 | 3 | 5 | 비대면 |
-| O006 | C101 | T001 | 2026 | 2학기 | 1 | 30 | 공학관 101호 | 화 | 2 | 4 | 대면 |
-
-### 11-6. 수강신청 예시
-
-| 신청번호 | 학번 | 개설번호 | 신청일시 | 신청 상태 | 성적 확정 여부 |
-| --- | --- | --- | --- | --- | --- |
-| R001 | 20241001 | O001 | 2026-02-20 10:05:00 | 신청 | 미확정 |
-| R002 | 20241001 | O002 | 2026-02-20 10:06:00 | 신청 | 미확정 |
-| R003 | 20241002 | O001 | 2026-02-20 10:10:00 | 신청 | 미확정 |
-| R004 | 20241002 | O003 | 2026-02-20 10:11:00 | 신청 | 미확정 |
-| R005 | 20241003 | O001 | 2026-02-20 10:20:00 | 신청 | 미확정 |
-| R006 | 20241003 | O005 | 2026-02-20 10:21:00 | 신청 | 미확정 |
-| R007 | 20241004 | O004 | 2026-02-20 10:30:00 | 신청 | 미확정 |
-| R008 | 20241004 | O003 | 2026-02-20 10:31:00 | 취소 | 미확정 |
-| R009 | 20241005 | O005 | 2026-02-20 10:40:00 | 대기 | 미확정 |
-| R010 | 20241002 | O006 | 2026-07-10 09:00:00 | 신청 | 미확정 |
-
-### 11-7. 데이터 연결 예시
-
-- 학생 20241001은 O001, O002를 신청한 상태입니다.
-- 학생 20241002는 O001, O003, O006과 연결되어 있습니다.
-- 학생 20241003은 O001, O005를 신청했습니다.
-- 학생 20241004는 O004를 신청했지만 O003은 취소했습니다.
-- 학생 20241005는 O005에서 대기 상태입니다.
-
-### 11-8. 예시 데이터로 확인할 수 있는 점
-
-- 같은 과목 C101이 1학기와 2학기에 각각 다른 개설번호 O001, O006으로 다시 열릴 수 있습니다.
-- 교수 T001은 여러 개설 강의를 맡을 수 있습니다.
-- 학생 한 명은 여러 강의를 신청할 수 있습니다.
-- 수강신청은 학생과 개설 강의를 잇는 연결 기록이라는 점을 확인할 수 있습니다.
-- 신청 상태가 신청, 취소, 대기로 나뉘어 운영 가능성을 보여 줍니다.
-
-## 12. 원본 데이터만
-
-학과
-D001, 컴퓨터공학과, 공과대학, 공학관 302호, 02-111-1001
-D002, 소프트웨어학과, 공과대학, 공학관 305호, 02-111-1002
-D003, 경영학과, 경영대학, 경영관 201호, 02-222-2001
-D004, 전자공학과, 공과대학, 전자관 410호, 02-111-1004
-
-학생
-20241001, 김민준, D001, 1, 010-1234-1001, minjun@univ.ac.kr, 재학
-20241002, 이서연, D002, 2, 010-1234-1002, seoyeon@univ.ac.kr, 재학
-20241003, 박지후, D001, 3, 010-1234-1003, jiho@univ.ac.kr, 재학
-20241004, 최유진, D003, 2, 010-1234-1004, yujin@univ.ac.kr, 재학
-20241005, 정현우, D004, 4, 010-1234-1005, hyunwoo@univ.ac.kr, 휴학
-
-교수
-T001, 김태호, D001, 조교수, 02-333-3001, taecho@univ.ac.kr
-T002, 이정민, D002, 부교수, 02-333-3002, jmlee@univ.ac.kr
-T003, 박선영, D003, 교수, 02-333-3003, sypark@univ.ac.kr
-
-과목
-C101, 데이터베이스, 3, 예, 전공, 데이터 저장과 질의의 기본 원리를 배우는 과목, D001
-C102, 자료구조, 3, 예, 전공, 배열, 리스트, 스택, 큐, 트리 구조를 학습하는 과목, D001
-C103, 웹프로그래밍, 3, 아니오, 전공선택, 웹 화면과 서버 통신을 다루는 과목, D002
-C104, 경영정보시스템, 3, 아니오, 전공선택, 경영 의사결정에 정보시스템을 활용하는 과목, D003
-C105, 디지털논리회로, 3, 예, 전공, 논리 게이트와 조합회로를 다루는 과목, D004
-
-강의 개설
-O001, C101, T001, 2026, 1학기, 1, 30, 공학관 101호, 월, 2, 4, 대면
-O002, C102, T001, 2026, 1학기, 1, 35, 공학관 102호, 수, 2, 4, 대면
-O003, C103, T002, 2026, 1학기, 1, 25, 공학관 203호, 화, 5, 7, 혼합형
-O004, C104, T003, 2026, 1학기, 1, 40, 경영관 105호, 목, 1, 3, 대면
-O005, C105, T001, 2026, 1학기, 1, 20, 전자관 210호, 금, 3, 5, 비대면
-O006, C101, T001, 2026, 2학기, 1, 30, 공학관 101호, 화, 2, 4, 대면
-
-수강신청
-R001, 20241001, O001, 2026-02-20 10:05:00, 신청, 미확정
-R002, 20241001, O002, 2026-02-20 10:06:00, 신청, 미확정
-R003, 20241002, O001, 2026-02-20 10:10:00, 신청, 미확정
-R004, 20241002, O003, 2026-02-20 10:11:00, 신청, 미확정
-R005, 20241003, O001, 2026-02-20 10:20:00, 신청, 미확정
-R006, 20241003, O005, 2026-02-20 10:21:00, 신청, 미확정
-R007, 20241004, O004, 2026-02-20 10:30:00, 신청, 미확정
-R008, 20241004, O003, 2026-02-20 10:31:00, 취소, 미확정
-R009, 20241005, O005, 2026-02-20 10:40:00, 대기, 미확정
-R010, 20241002, O006, 2026-07-10 09:00:00, 신청, 미확정
-
-
-
-# 실제 데이터 수강신청을 하는경우 
-
-- 학생이 수강신청 버튼을 클릭하면 `INSERT INTO` 문을 사용하여 `수강신청` 테이블에 데이터를 추가합니다.
-
-```sql
-INSERT INTO 수강신청 (학번, 개설번호, 신청일시, 신청상태) VALUES ('20241001', 'O001', NOW(), '신청');
-```
-
-- `NOW()` 함수는 현재 날짜와 시간을 자동으로 입력해줍니다.
-- 수강신청이 성공적으로 이루어지면, 학생은 신청한 강의 목록을 조회할 수 있습니다.
-
-```sql
-SELECT * FROM 수강신청 WHERE 학번 = '20241001';
-```
+<!-- ================================================================================
+PicoTeam2 MySQL 데이터베이스 설계
+100대 장비 기준 스마트팜 센서 데이터 저장 구조
+================================================================================
+
+[개요]
+- 목적: 100대 텃밭 장비의 센서 데이터, 상태, 이벤트, 경고를 중앙 집중식으로 관리
+- 저장 대상: 실시간 센서값(온습도, 토양수분, 조도), 장비 상태, 제어 이벤트
+- 조회 요구사항: 장비별 최신 상태, 기간별 데이터, 이벤트 통계, 알림 히스토리
+- 업데이트 빈도: 장비당 1분~10초 단위 (예상 초당 10~100건 INSERT)
+
+================================================================================
+[필요한 테이블 목록]
+================================================================================
+
+비닐 하우스 10개중 3개는 상추 재배, 5개는 토마토 재배, 2개는 고추 재배
+
+
+1. devices (장비 메타데이터)
+   - 각 텃밭/포트 마다 고유한 장비 정보 저장
+   - 100대를 구분/관리하기 위한 마스터 테이블
+   예시 
+    | device_id | device_name       | location     | status  | mqtt_client_id  | created_at          | updated_at          | notes        |
+    |-----------|-------------------|--------------|---------|-----------------|---------------------|---------------------|--------------|
+    |         1 | 거실_텃밭_1      | 거실 창가  | active  | pico_client_001 | 2024-04-01 10:00:00 | 2024-04-01 10:00:00 | 상추 재배    |
+    |         2 | 베란다_포트_A | 베란다      | active  | pico_client_002 | 2024-04-01 10:05:00 | 2024-04-01 10:05:00 | 토마토 재배    |
+    |         3 | 베란다_포트_B | 베란다      | active  | pico_client_003 | 2024-04-01 10:10:00 | 2024-04-01 10:10:00 | 고추 재배    |
+
+2. sensor_readings (센서 시계열 데이터 로그)
+   - 모든 센서값 원본 기록 (온습도, 토양수분, 조도, 수위)
+   - 가장 용량이 큰 테이블 (시계열 DB처럼 동작)
+   - 조회: 장비별 최근 N시간, 기간 통계, 추이 분석
+
+3. device_current_status (각 장비의 현재 상태)
+   - 최신 값만 저장 (ON UPDATE 로 갱신)
+   - 대시보드 빠른 조회용
+   - 저용량, 빠른 응답
+
+4. events (제어/이벤트 로그)
+   - pump_on, shade_close, shade_open, water_low 같은 이벤트 기록
+   - 자동 제어 트리거 누적
+   - 사용자 원격 제어 기록
+
+5. alerts (경고/알림 이력)
+   - water_low, 온도 이상, 토양 건조 등 조건 기반 알림 발생 기록
+   - 텔레그램 발송 여부, 발송 시각 추적
+   - 장비별 경고 상태 모니터링
+
+================================================================================
+[테이블 상세 구조]
+================================================================================
+
+[1] devices 테이블
+----
+목적: 100대 장비를 고유하게 식별/관리하기 위한 정보
+예상 행 수: 100개
+갱신 빈도: 낮음 (장비 추가/삭제 시만)
+
+CREATE TABLE devices (
+    device_id INT PRIMARY KEY AUTO_INCREMENT COMMENT '장비 고유 번호',
+    device_name VARCHAR(100) NOT NULL UNIQUE COMMENT '장비 이름 (예: "거실_텃밭_1", "베란다_포트_A")',
+    location VARCHAR(255) COMMENT '위치 (예: "거실 창가", "베란다")',
+    status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active' COMMENT '장비 활성 상태',
+    mqtt_client_id VARCHAR(100) UNIQUE COMMENT 'Pico MQTT client ID',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    notes TEXT COMMENT '비고',
+    
+    INDEX idx_device_name (device_name),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='스마트팜 장비 마스터 테이블';
+
+
+[2] sensor_readings 테이블
+----
+목적: 센서 데이터의 전체 이력 기록 (시계열)
+예상 행 수: 매우 높음 (초당 10~100건 × 일 × 365일 = 수억~수십억)
+갱신 빈도: 극도로 높음 (가장 자주 INSERT)
+주의: 이 테이블이 가장 용량이 클 것이므로 인덱스/파티셔닝 전략 중요
+
+CREATE TABLE sensor_readings (
+    reading_id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '읽기 고유 ID',
+    device_id INT NOT NULL COMMENT '장비 번호',
+    
+    -- 센서 데이터 (현재 sensor_db.json에서 수집하는 모든 값)
+    temperature FLOAT COMMENT '온도 (℃)',
+    humidity FLOAT COMMENT '습도 (%)',
+    light_raw INT COMMENT '조도 센서값 (0~4095)',
+    soil_raw INT COMMENT '토양 수분 센서값 (0~4095)',
+    water_level INT COMMENT '물탱크 잔량 (%)',
+    shade_state TINYINT COMMENT '차양막 상태 (0=열림, 1=닫힘)',
+    
+    -- 이벤트 정보
+    event_type VARCHAR(32) COMMENT 'pump_on, shade_close, shade_open, water_low, regular 등',
+    
+    -- 시간 정보 (성능을 위해 인덱싱)
+    timestamp DATETIME NOT NULL COMMENT '센서 데이터 수신 시간 (KST)',
+    
+    -- 계산 필드 (선택사항: DB에서 미리 가공하는 것도 가능)
+    soil_status VARCHAR(20) COMMENT '토양 상태 (건조/적절 등)',
+    light_status VARCHAR(20) COMMENT '조도 상태 (부족/적절/과다)',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '레코드 생성 시각',
+    
+    -- 외래키
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    -- 인덱스: 조회 성능이 매우 중요하므로 여러 조합 인덱스 생성
+    INDEX idx_device_timestamp (device_id, timestamp DESC) COMMENT '장비별 최신 데이터 조회 최적화',
+    INDEX idx_timestamp (timestamp DESC) COMMENT '전체 최신 데이터 조회',
+    INDEX idx_event_type (event_type) COMMENT '이벤트 타입별 조회',
+    INDEX idx_device_event (device_id, event_type, timestamp) COMMENT '장비별 이벤트 필터링'
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='센서 데이터 시계열 로그 (용량 최대, 가장 자주 조회)';
+
+-- 선택사항: 시간 기반 파티셔닝 (용량이 매우 커질 경우)
+-- PARTITION BY RANGE (YEAR_MONTH(timestamp)) (
+--     PARTITION p202404 VALUES LESS THAN (202405),
+--     PARTITION p202405 VALUES LESS THAN (202406)
+-- );
+
+
+[3] device_current_status 테이블
+----
+목적: 각 장비의 가장 최신 상태만 저장 (대시보드 빠른 조회용)
+예상 행 수: 100개 (장비 수와 동일)
+갱신 빈도: 높음 (매 센서값 도착 시 UPDATE 또는 INSERT ON DUPLICATE KEY UPDATE)
+장점: 전체 로그 조회보다 매우 빠름
+
+CREATE TABLE device_current_status (
+    device_id INT PRIMARY KEY COMMENT '장비 번호',
+    
+    -- 최신 센서값
+    temperature FLOAT COMMENT '현재 온도',
+    humidity FLOAT COMMENT '현재 습도',
+    light_raw INT COMMENT '현재 조도',
+    soil_raw INT COMMENT '현재 토양 수분',
+    water_level INT COMMENT '현재 물탱크 잔량 (%)',
+    shade_state TINYINT COMMENT '차양막 현재 상태',
+    
+    -- 상태 해석
+    soil_status VARCHAR(20) COMMENT '토양 상태 해석',
+    light_status VARCHAR(20) COMMENT '조도 상태 해석',
+    
+    -- 마지막 업데이트 시각
+    last_reading_at DATETIME COMMENT '마지막 센서 데이터 수신 시각',
+    
+    -- 경고 상태 플래그
+    is_water_low BOOLEAN DEFAULT FALSE COMMENT '물탱크 부족 여부',
+    is_soil_dry BOOLEAN DEFAULT FALSE COMMENT '토양 건조 여부',
+    is_temperature_alert BOOLEAN DEFAULT FALSE COMMENT '온도 이상 여부',
+    
+    -- 메타정보
+    last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- 외래키
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    -- 인덱스
+    INDEX idx_last_reading (last_reading_at DESC),
+    INDEX idx_alerts (is_water_low, is_soil_dry, is_temperature_alert)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='각 장비의 최신 상태 (빠른 조회용 캐시 테이블)';
+
+
+[4] events 테이블
+----
+목적: 제어 이벤트 및 자동 트리거 기록
+이벤트 타입:
+  - regular: 정기적인 센서 리포트
+  - pump_on: 자동 또는 수동으로 펌프 시작
+  - shade_close: 차양막 닫음
+  - shade_open: 차양막 열음
+  - water_low: 물탱크 부족 알람
+  - manual_pump: 사용자가 원격에서 펌프 수동 제어
+  - manual_shade: 사용자가 원격에서 차양막 수동 제어
+예상 행 수: 높음 (하루에 장비당 수십~수백건)
+갱신 빈도: 높음
+
+CREATE TABLE events (
+    event_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    device_id INT NOT NULL,
+    
+    -- 이벤트 정보
+    event_type VARCHAR(32) NOT NULL COMMENT 'pump_on, shade_close, shade_open, water_low, regular, manual_pump 등',
+    trigger_source VARCHAR(32) COMMENT '발생 원인 (auto=자동 제어, manual=사용자 원격, sensor=센서 경고)',
+    
+    -- 이벤트 시점의 센서값 스냅샷 (원인 분석용)
+    temperature_at_event FLOAT,
+    humidity_at_event FLOAT,
+    light_at_event INT,
+    soil_at_event INT,
+    water_at_event INT,
+    
+    -- 이벤트 상세
+    description VARCHAR(255) COMMENT '이벤트 상세 설명',
+    timestamp DATETIME NOT NULL,
+    
+    -- 대시보드 로그/카드 표시용
+    display_message VARCHAR(255) COMMENT 'UI 표시 메시지',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    INDEX idx_device_timestamp (device_id, timestamp DESC),
+    INDEX idx_event_type (event_type, timestamp DESC),
+    INDEX idx_trigger_source (trigger_source)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='제어 및 이벤트 로그';
+
+
+[5] alerts 테이블
+----
+목적: 경고/알림 발생 및 해결 추적
+경고 타입:
+  - water_low: 물탱크 부족
+  - soil_dry: 토양 건조
+  - temperature_high: 온도 과높음
+  - temperature_low: 온도 과낮음
+  - humidity_high: 습도 과높음
+  - light_insufficient: 조도 부족
+  - device_offline: 장비 통신 끊김
+예상 행 수: 중간 (중요한 경고만 기록)
+갱신 빈도: 중간
+
+CREATE TABLE alerts (
+    alert_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    device_id INT NOT NULL,
+    
+    -- 경고 정보
+    alert_type VARCHAR(32) NOT NULL COMMENT '경고 타입',
+    severity ENUM('info', 'warning', 'critical') DEFAULT 'warning' COMMENT '심각도',
+    
+    -- 경고 발생 조건
+    trigger_value FLOAT COMMENT '경고를 발생시킨 값 (예: water_level=5%)',
+    trigger_threshold FLOAT COMMENT '임계값',
+    
+    -- 경고 상태
+    status ENUM('open', 'acknowledged', 'resolved') DEFAULT 'open' COMMENT '경고 상태',
+    
+    -- 알림 발송 기록
+    telegram_sent BOOLEAN DEFAULT FALSE COMMENT '텔레그램 발송 여부',
+    telegram_sent_at DATETIME COMMENT '텔레그램 발송 시각',
+    telegram_message_id VARCHAR(100) COMMENT 'Telegram Message ID (나중에 수정 가능)',
+    
+    -- 타임스탬프
+    occurred_at DATETIME NOT NULL COMMENT '경고 발생 시각',
+    acknowledged_at DATETIME COMMENT '확인 시각',
+    resolved_at DATETIME COMMENT '해결 시각',
+    
+    -- 비고
+    notes TEXT COMMENT '대응 기록',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    INDEX idx_device_status (device_id, status),
+    INDEX idx_occurred_at (occurred_at DESC),
+    INDEX idx_alert_type (alert_type, status),
+    INDEX idx_telegram_sent (telegram_sent, occurred_at)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='경고/알림 이력 추적';
+
+================================================================================
+[데이터 관계도]
+================================================================================
+
+devices (1) ──── (N) sensor_readings
+          │
+          ├──── (N) device_current_status
+          │
+          ├──── (N) events
+          │
+          └──── (N) alerts
+
+
+================================================================================
+[예상 데이터 보존 정책]
+================================================================================
+
+sensor_readings:
+  - 원본 저장: 모든 데이터 무기한 저장 (또는 파티셔닝으로 관리)
+  - 백업: 주 단위 덤프
+  - 아카이빙: 1년 이상 된 데이터는 별도 스토리지로 이전 가능
+
+events, alerts:
+  - 1년 이상 보관 (중요한 운영 이력)
+
+device_current_status:
+  - 항상 최신 상태만 유지 (덮어쓰기)
+
+
+================================================================================
+[100대 기준 예상 용량/성능]
+================================================================================
+
+INSERT 빈도:
+  - 장비 100대 × 1분마다 1건 = 초당 1.67건 (여유 있음)
+  - 장비 100대 × 10초마다 1건 = 초당 10건 (정상)
+  - 장비 100대 × 초당 1건 = 초당 100건 (부하 있음, 최적화 필요)
+
+연간 용량 추정:
+  - 센서값만: 장비 100대 × 1분마다 × 365일 × 365 = 약 5.2천만 행 ≈ 5GB (대략)
+  - 이벤트/경고: 추가 수백MB
+
+권장 설정:
+  - InnoDB buffer_pool_size: 서버 메모리의 50~75%
+  - max_connections: 50 이상
+  - innodb_flush_log_at_trx_commit: 2 (성능 vs 안정성 균형)
+
+================================================================================
+[SQL 쿼리 예시]
+================================================================================
+
+[조회 1] 현재 모든 장비의 상태 보드
+SELECT 
+    d.device_id, d.device_name, d.location,
+    s.temperature, s.humidity, s.light_raw, s.soil_raw, s.water_level, s.shade_state,
+    s.soil_status, s.light_status,
+    s.last_reading_at,
+    s.is_water_low, s.is_soil_dry, s.is_temperature_alert
+FROM device_current_status s
+JOIN devices d ON s.device_id = d.device_id
+WHERE d.status = 'active'
+ORDER BY d.device_id;
+
+[조회 2] 특정 장비의 최근 1시간 센서 데이터
+SELECT 
+    timestamp, temperature, humidity, light_raw, soil_raw, water_level,
+    event_type
+FROM sensor_readings
+WHERE device_id = ? 
+  AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+ORDER BY timestamp DESC;
+
+[조회 3] 어제 물탱크 부족 경고 발생 현황
+SELECT 
+    d.device_name, COUNT(*) as count, 
+    MIN(a.occurred_at) as first_alert, 
+    MAX(a.resolved_at) as last_resolved
+FROM alerts a
+JOIN devices d ON a.device_id = d.device_id
+WHERE a.alert_type = 'water_low' 
+  AND DATE(a.occurred_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+GROUP BY a.device_id, d.device_name;
+
+[조회 4] 미해결 경고 목록
+SELECT 
+    a.alert_id, d.device_name, a.alert_type, a.severity,
+    a.occurred_at, a.telegram_sent,
+    TIMESTAMPDIFF(HOUR, a.occurred_at, NOW()) as hours_since_alert
+FROM alerts a
+JOIN devices d ON a.device_id = d.device_id
+WHERE a.status = 'open'
+ORDER BY a.severity DESC, a.occurred_at DESC;
+
+================================================================================
+[API 엔드포인트 매핑 (Flask)]
+================================================================================
+
+GET /api/devices              → devices 테이블 목록
+GET /api/device/<id>/status   → device_current_status 조회
+GET /api/device/<id>/readings → sensor_readings (최근 N시간)
+GET /api/device/<id>/events   → events 테이블 필터
+GET /api/device/<id>/alerts   → alerts 테이블 필터
+
+POST /api/control/<id>/<cmd>  → events에 기록 + Pico에 MQTT 발행
+POST /api/alert/<id>/acknowledge → alerts.status 업데이트
+
+================================================================================ -->
+
+필요한 모든 데이터 종류?
+
+- 장치 아이디
+- 장치 이름
+- 장치 위치
+- 재배 종류 (상추/토마토/고추등)
+- 장치 고유 MQTT 클라이언트 ID
+- 장치 상태 (활성/비활성/점검)
+- 센서 데이터: 온도, 습도, 조도, 토양 수분
+- 물탱크 잔량
+- 차양막 상태
+- 이벤트 타입 (pump_on, shade_close, shade_open, water_low 등)
+- 이벤트 발생 시각
+- 경고 타입 (water_low, soil_dry, temperature_high 등)
+- 경고 심각도 (info/warning/critical)
+- 경고 발생 시각
+- 경고 상태 (open/acknowledged/resolved)
+- 텔레그램 발송 여부 및 시각
+- 장치별 최신 센서값과 상태
+- 장치별 이벤트 및 경고 이력
+- 장치별 제어 이벤트 (자동/수동)
+- 장치별 경고 이력 및 대응 기록
