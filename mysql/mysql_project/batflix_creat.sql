@@ -116,7 +116,7 @@ create table shade_device_history(
     operation_time datetime,
     foreign key (shade_device_id) references shade_device(shade_device_id) ON DELETE CASCADE
 );
-
+-- 메시지 테이블
 create table message(
     message_id int PRIMARY KEY,
     customer_id int,
