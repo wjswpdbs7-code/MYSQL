@@ -1,0 +1,6 @@
+하우스 id 1번 가진 고객 이름 구하기
+
+slect custormer_name 
+from custormer join house
+on custormer.house_id = house.house_id
+where house_id = 1;
