@@ -1,5 +1,3 @@
-use batflix;
-
 -- 고객 / 하우스 초기 데이터
 insert into customer values (1, '홍길동', '010-1234-5678', 'jildong@gmail.com', '서울시 강남구');
 insert into customer values (2, '김철수', '010-2345-6789', 'chursu@naver.com', '대전시 유성구');

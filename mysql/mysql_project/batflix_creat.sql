@@ -1,8 +1,12 @@
 
+-- 데이터베이스 생성
 create database batflix;
 
+
+-- 데이터베이스 선택
 use batflix;
 
+-- 고객 테이블
 create table customer(
     customer_id int PRIMARY KEY,
     customer_name varchar(20),
@@ -11,6 +15,7 @@ create table customer(
     customer_addr varchar(100)
 );
 
+-- 하우스 테이블
 create table house(
     house_id int PRIMARY KEY,
     house_status varchar(20),
@@ -21,6 +26,7 @@ create table house(
     foreign key (customer_id) references customer(customer_id) ON DELETE CASCADE
 );
 
+-- 센서 및 장치 테이블
 create table temp_humidity_sensor(
     th_sensor_id int PRIMARY KEY,
     house_id int,
@@ -47,7 +53,7 @@ create table light_sensor(
 create table light_values(
     lx_value_id int PRIMARY KEY,
     lx_sensor_id int, 
-    light_value decimal(10,2),ㅋ
+    light_value decimal(10,2),
     record_time datetime,
     lx_sensor_status varchar(40),
     foreign key (lx_sensor_id) references light_sensor(lx_sensor_id) ON DELETE CASCADE 
