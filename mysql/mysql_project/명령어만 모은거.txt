@@ -1,4 +1,8 @@
 
+create database batflix;
+
+use batflix;
+
 create table house(
     house_id int PRIMARY KEY,
     house_status varchar(20),
