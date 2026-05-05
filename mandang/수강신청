@@ -1,0 +1,396 @@
+<!-- ================================================================================
+PicoTeam2 MySQL 데이터베이스 설계
+100대 장비 기준 스마트팜 센서 데이터 저장 구조
+================================================================================
+
+[개요]
+- 목적: 100대 텃밭 장비의 센서 데이터, 상태, 이벤트, 경고를 중앙 집중식으로 관리
+- 저장 대상: 실시간 센서값(온습도, 토양수분, 조도), 장비 상태, 제어 이벤트
+- 조회 요구사항: 장비별 최신 상태, 기간별 데이터, 이벤트 통계, 알림 히스토리
+- 업데이트 빈도: 장비당 1분~10초 단위 (예상 초당 10~100건 INSERT)
+
+================================================================================
+[필요한 테이블 목록]
+================================================================================
+
+비닐 하우스 10개중 3개는 상추 재배, 5개는 토마토 재배, 2개는 고추 재배
+
+
+1. devices (장비 메타데이터)
+   - 각 텃밭/포트 마다 고유한 장비 정보 저장
+   - 100대를 구분/관리하기 위한 마스터 테이블
+   예시 
+    | device_id | device_name       | location     | status  | mqtt_client_id  | created_at          | updated_at          | notes        |
+    |-----------|-------------------|--------------|---------|-----------------|---------------------|---------------------|--------------|
+    |         1 | 거실_텃밭_1      | 거실 창가  | active  | pico_client_001 | 2024-04-01 10:00:00 | 2024-04-01 10:00:00 | 상추 재배    |
+    |         2 | 베란다_포트_A | 베란다      | active  | pico_client_002 | 2024-04-01 10:05:00 | 2024-04-01 10:05:00 | 토마토 재배    |
+    |         3 | 베란다_포트_B | 베란다      | active  | pico_client_003 | 2024-04-01 10:10:00 | 2024-04-01 10:10:00 | 고추 재배    |
+
+2. sensor_readings (센서 시계열 데이터 로그)
+   - 모든 센서값 원본 기록 (온습도, 토양수분, 조도, 수위)
+   - 가장 용량이 큰 테이블 (시계열 DB처럼 동작)
+   - 조회: 장비별 최근 N시간, 기간 통계, 추이 분석
+
+3. device_current_status (각 장비의 현재 상태)
+   - 최신 값만 저장 (ON UPDATE 로 갱신)
+   - 대시보드 빠른 조회용
+   - 저용량, 빠른 응답
+
+4. events (제어/이벤트 로그)
+   - pump_on, shade_close, shade_open, water_low 같은 이벤트 기록
+   - 자동 제어 트리거 누적
+   - 사용자 원격 제어 기록
+
+5. alerts (경고/알림 이력)
+   - water_low, 온도 이상, 토양 건조 등 조건 기반 알림 발생 기록
+   - 텔레그램 발송 여부, 발송 시각 추적
+   - 장비별 경고 상태 모니터링
+
+================================================================================
+[테이블 상세 구조]
+================================================================================
+
+[1] devices 테이블
+----
+목적: 100대 장비를 고유하게 식별/관리하기 위한 정보
+예상 행 수: 100개
+갱신 빈도: 낮음 (장비 추가/삭제 시만)
+
+CREATE TABLE devices (
+    device_id INT PRIMARY KEY AUTO_INCREMENT COMMENT '장비 고유 번호',
+    device_name VARCHAR(100) NOT NULL UNIQUE COMMENT '장비 이름 (예: "거실_텃밭_1", "베란다_포트_A")',
+    location VARCHAR(255) COMMENT '위치 (예: "거실 창가", "베란다")',
+    status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active' COMMENT '장비 활성 상태',
+    mqtt_client_id VARCHAR(100) UNIQUE COMMENT 'Pico MQTT client ID',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    notes TEXT COMMENT '비고',
+    
+    INDEX idx_device_name (device_name),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='스마트팜 장비 마스터 테이블';
+
+
+[2] sensor_readings 테이블
+----
+목적: 센서 데이터의 전체 이력 기록 (시계열)
+예상 행 수: 매우 높음 (초당 10~100건 × 일 × 365일 = 수억~수십억)
+갱신 빈도: 극도로 높음 (가장 자주 INSERT)
+주의: 이 테이블이 가장 용량이 클 것이므로 인덱스/파티셔닝 전략 중요
+
+CREATE TABLE sensor_readings (
+    reading_id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '읽기 고유 ID',
+    device_id INT NOT NULL COMMENT '장비 번호',
+    
+    -- 센서 데이터 (현재 sensor_db.json에서 수집하는 모든 값)
+    temperature FLOAT COMMENT '온도 (℃)',
+    humidity FLOAT COMMENT '습도 (%)',
+    light_raw INT COMMENT '조도 센서값 (0~4095)',
+    soil_raw INT COMMENT '토양 수분 센서값 (0~4095)',
+    water_level INT COMMENT '물탱크 잔량 (%)',
+    shade_state TINYINT COMMENT '차양막 상태 (0=열림, 1=닫힘)',
+    
+    -- 이벤트 정보
+    event_type VARCHAR(32) COMMENT 'pump_on, shade_close, shade_open, water_low, regular 등',
+    
+    -- 시간 정보 (성능을 위해 인덱싱)
+    timestamp DATETIME NOT NULL COMMENT '센서 데이터 수신 시간 (KST)',
+    
+    -- 계산 필드 (선택사항: DB에서 미리 가공하는 것도 가능)
+    soil_status VARCHAR(20) COMMENT '토양 상태 (건조/적절 등)',
+    light_status VARCHAR(20) COMMENT '조도 상태 (부족/적절/과다)',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '레코드 생성 시각',
+    
+    -- 외래키
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    -- 인덱스: 조회 성능이 매우 중요하므로 여러 조합 인덱스 생성
+    INDEX idx_device_timestamp (device_id, timestamp DESC) COMMENT '장비별 최신 데이터 조회 최적화',
+    INDEX idx_timestamp (timestamp DESC) COMMENT '전체 최신 데이터 조회',
+    INDEX idx_event_type (event_type) COMMENT '이벤트 타입별 조회',
+    INDEX idx_device_event (device_id, event_type, timestamp) COMMENT '장비별 이벤트 필터링'
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='센서 데이터 시계열 로그 (용량 최대, 가장 자주 조회)';
+
+-- 선택사항: 시간 기반 파티셔닝 (용량이 매우 커질 경우)
+-- PARTITION BY RANGE (YEAR_MONTH(timestamp)) (
+--     PARTITION p202404 VALUES LESS THAN (202405),
+--     PARTITION p202405 VALUES LESS THAN (202406)
+-- );
+
+
+[3] device_current_status 테이블
+----
+목적: 각 장비의 가장 최신 상태만 저장 (대시보드 빠른 조회용)
+예상 행 수: 100개 (장비 수와 동일)
+갱신 빈도: 높음 (매 센서값 도착 시 UPDATE 또는 INSERT ON DUPLICATE KEY UPDATE)
+장점: 전체 로그 조회보다 매우 빠름
+
+CREATE TABLE device_current_status (
+    device_id INT PRIMARY KEY COMMENT '장비 번호',
+    
+    -- 최신 센서값
+    temperature FLOAT COMMENT '현재 온도',
+    humidity FLOAT COMMENT '현재 습도',
+    light_raw INT COMMENT '현재 조도',
+    soil_raw INT COMMENT '현재 토양 수분',
+    water_level INT COMMENT '현재 물탱크 잔량 (%)',
+    shade_state TINYINT COMMENT '차양막 현재 상태',
+    
+    -- 상태 해석
+    soil_status VARCHAR(20) COMMENT '토양 상태 해석',
+    light_status VARCHAR(20) COMMENT '조도 상태 해석',
+    
+    -- 마지막 업데이트 시각
+    last_reading_at DATETIME COMMENT '마지막 센서 데이터 수신 시각',
+    
+    -- 경고 상태 플래그
+    is_water_low BOOLEAN DEFAULT FALSE COMMENT '물탱크 부족 여부',
+    is_soil_dry BOOLEAN DEFAULT FALSE COMMENT '토양 건조 여부',
+    is_temperature_alert BOOLEAN DEFAULT FALSE COMMENT '온도 이상 여부',
+    
+    -- 메타정보
+    last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- 외래키
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    -- 인덱스
+    INDEX idx_last_reading (last_reading_at DESC),
+    INDEX idx_alerts (is_water_low, is_soil_dry, is_temperature_alert)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='각 장비의 최신 상태 (빠른 조회용 캐시 테이블)';
+
+
+[4] events 테이블
+----
+목적: 제어 이벤트 및 자동 트리거 기록
+이벤트 타입:
+  - regular: 정기적인 센서 리포트
+  - pump_on: 자동 또는 수동으로 펌프 시작
+  - shade_close: 차양막 닫음
+  - shade_open: 차양막 열음
+  - water_low: 물탱크 부족 알람
+  - manual_pump: 사용자가 원격에서 펌프 수동 제어
+  - manual_shade: 사용자가 원격에서 차양막 수동 제어
+예상 행 수: 높음 (하루에 장비당 수십~수백건)
+갱신 빈도: 높음
+
+CREATE TABLE events (
+    event_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    device_id INT NOT NULL,
+    
+    -- 이벤트 정보
+    event_type VARCHAR(32) NOT NULL COMMENT 'pump_on, shade_close, shade_open, water_low, regular, manual_pump 등',
+    trigger_source VARCHAR(32) COMMENT '발생 원인 (auto=자동 제어, manual=사용자 원격, sensor=센서 경고)',
+    
+    -- 이벤트 시점의 센서값 스냅샷 (원인 분석용)
+    temperature_at_event FLOAT,
+    humidity_at_event FLOAT,
+    light_at_event INT,
+    soil_at_event INT,
+    water_at_event INT,
+    
+    -- 이벤트 상세
+    description VARCHAR(255) COMMENT '이벤트 상세 설명',
+    timestamp DATETIME NOT NULL,
+    
+    -- 대시보드 로그/카드 표시용
+    display_message VARCHAR(255) COMMENT 'UI 표시 메시지',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    INDEX idx_device_timestamp (device_id, timestamp DESC),
+    INDEX idx_event_type (event_type, timestamp DESC),
+    INDEX idx_trigger_source (trigger_source)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='제어 및 이벤트 로그';
+
+
+[5] alerts 테이블
+----
+목적: 경고/알림 발생 및 해결 추적
+경고 타입:
+  - water_low: 물탱크 부족
+  - soil_dry: 토양 건조
+  - temperature_high: 온도 과높음
+  - temperature_low: 온도 과낮음
+  - humidity_high: 습도 과높음
+  - light_insufficient: 조도 부족
+  - device_offline: 장비 통신 끊김
+예상 행 수: 중간 (중요한 경고만 기록)
+갱신 빈도: 중간
+
+CREATE TABLE alerts (
+    alert_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    device_id INT NOT NULL,
+    
+    -- 경고 정보
+    alert_type VARCHAR(32) NOT NULL COMMENT '경고 타입',
+    severity ENUM('info', 'warning', 'critical') DEFAULT 'warning' COMMENT '심각도',
+    
+    -- 경고 발생 조건
+    trigger_value FLOAT COMMENT '경고를 발생시킨 값 (예: water_level=5%)',
+    trigger_threshold FLOAT COMMENT '임계값',
+    
+    -- 경고 상태
+    status ENUM('open', 'acknowledged', 'resolved') DEFAULT 'open' COMMENT '경고 상태',
+    
+    -- 알림 발송 기록
+    telegram_sent BOOLEAN DEFAULT FALSE COMMENT '텔레그램 발송 여부',
+    telegram_sent_at DATETIME COMMENT '텔레그램 발송 시각',
+    telegram_message_id VARCHAR(100) COMMENT 'Telegram Message ID (나중에 수정 가능)',
+    
+    -- 타임스탬프
+    occurred_at DATETIME NOT NULL COMMENT '경고 발생 시각',
+    acknowledged_at DATETIME COMMENT '확인 시각',
+    resolved_at DATETIME COMMENT '해결 시각',
+    
+    -- 비고
+    notes TEXT COMMENT '대응 기록',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+    
+    INDEX idx_device_status (device_id, status),
+    INDEX idx_occurred_at (occurred_at DESC),
+    INDEX idx_alert_type (alert_type, status),
+    INDEX idx_telegram_sent (telegram_sent, occurred_at)
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='경고/알림 이력 추적';
+
+================================================================================
+[데이터 관계도]
+================================================================================
+
+devices (1) ──── (N) sensor_readings
+          │
+          ├──── (N) device_current_status
+          │
+          ├──── (N) events
+          │
+          └──── (N) alerts
+
+
+================================================================================
+[예상 데이터 보존 정책]
+================================================================================
+
+sensor_readings:
+  - 원본 저장: 모든 데이터 무기한 저장 (또는 파티셔닝으로 관리)
+  - 백업: 주 단위 덤프
+  - 아카이빙: 1년 이상 된 데이터는 별도 스토리지로 이전 가능
+
+events, alerts:
+  - 1년 이상 보관 (중요한 운영 이력)
+
+device_current_status:
+  - 항상 최신 상태만 유지 (덮어쓰기)
+
+
+================================================================================
+[100대 기준 예상 용량/성능]
+================================================================================
+
+INSERT 빈도:
+  - 장비 100대 × 1분마다 1건 = 초당 1.67건 (여유 있음)
+  - 장비 100대 × 10초마다 1건 = 초당 10건 (정상)
+  - 장비 100대 × 초당 1건 = 초당 100건 (부하 있음, 최적화 필요)
+
+연간 용량 추정:
+  - 센서값만: 장비 100대 × 1분마다 × 365일 × 365 = 약 5.2천만 행 ≈ 5GB (대략)
+  - 이벤트/경고: 추가 수백MB
+
+권장 설정:
+  - InnoDB buffer_pool_size: 서버 메모리의 50~75%
+  - max_connections: 50 이상
+  - innodb_flush_log_at_trx_commit: 2 (성능 vs 안정성 균형)
+
+================================================================================
+[SQL 쿼리 예시]
+================================================================================
+
+[조회 1] 현재 모든 장비의 상태 보드
+SELECT 
+    d.device_id, d.device_name, d.location,
+    s.temperature, s.humidity, s.light_raw, s.soil_raw, s.water_level, s.shade_state,
+    s.soil_status, s.light_status,
+    s.last_reading_at,
+    s.is_water_low, s.is_soil_dry, s.is_temperature_alert
+FROM device_current_status s
+JOIN devices d ON s.device_id = d.device_id
+WHERE d.status = 'active'
+ORDER BY d.device_id;
+
+[조회 2] 특정 장비의 최근 1시간 센서 데이터
+SELECT 
+    timestamp, temperature, humidity, light_raw, soil_raw, water_level,
+    event_type
+FROM sensor_readings
+WHERE device_id = ? 
+  AND timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+ORDER BY timestamp DESC;
+
+[조회 3] 어제 물탱크 부족 경고 발생 현황
+SELECT 
+    d.device_name, COUNT(*) as count, 
+    MIN(a.occurred_at) as first_alert, 
+    MAX(a.resolved_at) as last_resolved
+FROM alerts a
+JOIN devices d ON a.device_id = d.device_id
+WHERE a.alert_type = 'water_low' 
+  AND DATE(a.occurred_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+GROUP BY a.device_id, d.device_name;
+
+[조회 4] 미해결 경고 목록
+SELECT 
+    a.alert_id, d.device_name, a.alert_type, a.severity,
+    a.occurred_at, a.telegram_sent,
+    TIMESTAMPDIFF(HOUR, a.occurred_at, NOW()) as hours_since_alert
+FROM alerts a
+JOIN devices d ON a.device_id = d.device_id
+WHERE a.status = 'open'
+ORDER BY a.severity DESC, a.occurred_at DESC;
+
+================================================================================
+[API 엔드포인트 매핑 (Flask)]
+================================================================================
+
+GET /api/devices              → devices 테이블 목록
+GET /api/device/<id>/status   → device_current_status 조회
+GET /api/device/<id>/readings → sensor_readings (최근 N시간)
+GET /api/device/<id>/events   → events 테이블 필터
+GET /api/device/<id>/alerts   → alerts 테이블 필터
+
+POST /api/control/<id>/<cmd>  → events에 기록 + Pico에 MQTT 발행
+POST /api/alert/<id>/acknowledge → alerts.status 업데이트
+
+================================================================================ -->
+
+필요한 모든 데이터 종류?
+
+- 장치 아이디
+- 장치 이름
+- 장치 위치
+- 재배 종류 (상추/토마토/고추등)
+- 장치 고유 MQTT 클라이언트 ID
+- 장치 상태 (활성/비활성/점검)
+- 센서 데이터: 온도, 습도, 조도, 토양 수분
+- 물탱크 잔량
+- 차양막 상태
+- 이벤트 타입 (pump_on, shade_close, shade_open, water_low 등)
+- 이벤트 발생 시각
+- 경고 타입 (water_low, soil_dry, temperature_high 등)
+- 경고 심각도 (info/warning/critical)
+- 경고 발생 시각
+- 경고 상태 (open/acknowledged/resolved)
+- 텔레그램 발송 여부 및 시각
+- 장치별 최신 센서값과 상태
+- 장치별 이벤트 및 경고 이력
+- 장치별 제어 이벤트 (자동/수동)
+- 장치별 경고 이력 및 대응 기록
